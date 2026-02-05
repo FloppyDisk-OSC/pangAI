@@ -1,141 +1,113 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>PangAI Control Panel</title>
-  <style>
-    body {
-      background: #111;
-      color: white;
-      font-family: sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-    }
-
-    #loginBox, #panel {
-      width: 400px;
-      padding: 20px;
-      border-radius: 12px;
-      background: #222;
-      box-shadow: 0 0 20px #000;
-      text-align: center;
-    }
-
-    input {
-      width: 80%;
-      padding: 10px;
-      border: none;
-      border-radius: 8px;
-      margin-top: 10px;
-    }
-
-    button {
-      margin-top: 15px;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 8px;
-      background: #00f;
-      color: white;
-      cursor: pointer;
-    }
-
-    #panel {
-      display: none;
-    }
-
-    #chatContainer {
-      margin-top: 20px;
-      height: 250px;
-      overflow-y: auto;
-      background: #111;
-      padding: 10px;
-      border-radius: 10px;
-      text-align: left;
-    }
-
-    .msg {
-      margin: 6px 0;
-      padding: 6px;
-      border-radius: 6px;
-    }
-
-    .user { background: #444; }
-    .ai { background: #0a0; }
-  </style>
+<meta charset="UTF-8">
+<title>PangAI Firebase Panel</title>
+<style>
+body { 
+    background: #111; 
+    color: white; 
+    font-family: sans-serif; 
+    display:flex; 
+    flex-direction:column; 
+    align-items:center; 
+    padding:20px; 
+}
+#chatContainer { 
+    width:90%; 
+    max-width:600px; 
+    height:400px; 
+    overflow-y:auto; 
+    background:#222; 
+    padding:10px; 
+    border-radius:10px; 
+    margin-bottom:10px; 
+}
+.message { 
+    margin:5px 0; 
+    padding:5px; 
+    border-radius:5px; 
+}
+.user { background:#444; }
+.ai { background:#0a0; }
+#replyInput { 
+    width:70%; 
+    padding:8px; 
+    border-radius:5px; 
+    border:none; 
+    margin-right:5px; 
+}
+#sendBtn { 
+    padding:8px 15px; 
+    border:none; 
+    border-radius:5px; 
+    background:#00f; 
+    color:#fff; 
+    cursor:pointer; 
+}
+</style>
 </head>
 <body>
 
-<div id="loginBox">
-  <h2>🔒 PangAI Access</h2>
-  <p>Enter passcode:</p>
-  <input id="passInput" type="password" placeholder="Passcode..." />
-  <br>
-  <button onclick="checkPass()">Unlock</button>
-  <p id="errorMsg" style="color:red;"></p>
+<h2>PangAI Firebase Panel</h2>
+
+<div id="chatContainer"></div>
+
+<div>
+<input id="replyInput" placeholder="Type AI response..." />
+<button id="sendBtn">Send</button>
 </div>
 
-<div id="panel">
-  <h2>✅ PangAI Control Panel</h2>
-
-  <div id="chatContainer"></div>
-
-  <input id="replyInput" placeholder="Type AI response..." />
-  <button onclick="sendReply()">Send</button>
-</div>
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
 <script>
-  // SHA-256 hash of your secret passcode
-  // Replace this with your own hash!
-  const PASS_HASH =
-    "d0fc5d068b62b0729fac89439e9bbb16b41e36921ed2b4e316d966486e8a140e";
-  // (this example hash = "1234")
+// 🔥 Your Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyBpDQlmOZHQrdRQF1mQPk_aPgxwb6gbheY",
+  authDomain: "pangai.firebaseapp.com",
+  projectId: "pangai",
+  storageBucket: "pangai.firebasestorage.app",
+  messagingSenderId: "456349287523",
+  appId: "1:456349287523:web:e0a252e4b55f3dd294e456"
+};
 
-  let messages = [];
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
-  async function hash(text) {
-    const data = new TextEncoder().encode(text);
-    const digest = await crypto.subtle.digest("SHA-256", data);
-    return Array.from(new Uint8Array(digest))
-      .map(b => b.toString(16).padStart(2, "0"))
-      .join("");
-  }
+const chatContainer = document.getElementById('chatContainer');
+const replyInput = document.getElementById('replyInput');
+const sendBtn = document.getElementById('sendBtn');
 
-  async function checkPass() {
-    const input = document.getElementById("passInput").value;
-    const hashed = await hash(input);
+// Function to render a message in the chat container
+function renderMessage(doc) {
+  const div = document.createElement('div');
+  div.className = 'message ' + doc.data().type;
+  div.textContent = (doc.data().type === 'ai' ? 'AI: ' : 'User: ') + doc.data().text;
+  chatContainer.appendChild(div);
+  chatContainer.scrollTop = chatContainer.scrollHeight;
+}
 
-    if (hashed === PASS_HASH) {
-      document.getElementById("loginBox").style.display = "none";
-      document.getElementById("panel").style.display = "block";
-    } else {
-      document.getElementById("errorMsg").textContent = "Wrong passcode.";
-    }
-  }
+// Listen for new messages in Firestore in real-time
+db.collection('messages').orderBy('timestamp')
+  .onSnapshot(snapshot => {
+    chatContainer.innerHTML = '';
+    snapshot.forEach(doc => renderMessage(doc));
+  });
 
-  function renderChat() {
-    const chat = document.getElementById("chatContainer");
-    chat.innerHTML = "";
-
-    messages.forEach(m => {
-      const div = document.createElement("div");
-      div.className = "msg " + m.type;
-      div.textContent = (m.type === "ai" ? "AI: " : "User: ") + m.text;
-      chat.appendChild(div);
-    });
-
-    chat.scrollTop = chat.scrollHeight;
-  }
-
-  function sendReply() {
-    const input = document.getElementById("replyInput");
-    if (!input.value.trim()) return;
-
-    messages.push({ type: "ai", text: input.value });
-    input.value = "";
-    renderChat();
-  }
+// Send AI response
+sendBtn.onclick = () => {
+  const text = replyInput.value.trim();
+  if(!text) return;
+  db.collection('messages').add({
+    text: text,
+    type: 'ai',
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  replyInput.value = '';
+};
 </script>
 
 </body>
