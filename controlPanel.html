@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PangAI Control Panel</title>
+<style>
+    body { background: #111; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+    h1 { color: #0f0; }
+    #chatContainer { width: 90%; max-width: 600px; height: 400px; background: #222; border-radius: 10px; overflow-y: auto; padding: 10px; margin-bottom: 10px; }
+    .message { margin: 5px 0; padding: 5px; border-radius: 5px; }
+    .user { background: #444; }
+    .ai { background: #0a0; }
+    #inputContainer { display: flex; width: 90%; max-width: 600px; }
+    #userInput { flex: 1; padding: 8px; border-radius: 5px 0 0 5px; border: none; }
+    #sendBtn { padding: 8px 15px; border: none; border-radius: 0 5px 5px 0; background: #00f; color: #fff; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<h1>PangAI Control Panel</h1>
+
+<div id="chatContainer"></div>
+
+<div id="inputContainer">
+    <input id="userInput" placeholder="Type AI response here" />
+    <button id="sendBtn">Send</button>
+</div>
+
+<script>
+// Messages will be stored in localStorage for simplicity
+let messages = JSON.parse(localStorage.getItem('pangAI_messages') || '[]');
+let lastId = messages.length ? messages[messages.length - 1].id : 0;
+
+const chatContainer = document.getElementById('chatContainer');
+const userInput = document.getElementById('userInput');
+const sendBtn = document.getElementById('sendBtn');
+
+function renderMessages() {
+    chatContainer.innerHTML = '';
+    messages.forEach(msg => {
+        const div = document.createElement('div');
+        div.className = 'message ' + (msg.type);
+        div.textContent = (msg.type === 'user' ? 'User: ' : 'AI: ') + msg.text;
+        chatContainer.appendChild(div);
+    });
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+// Add a new AI message
+function addAIMessage(text) {
+    lastId++;
+    messages.push({ id: lastId, type: 'ai', text });
+    localStorage.setItem('pangAI_messages', JSON.stringify(messages));
+    renderMessages();
+}
+
+// Simulate receiving a user message (for demo/testing)
+// The extension would POST messages to this endpoint in a real scenario
+function addUserMessage(text) {
+    lastId++;
+    messages.push({ id: lastId, type: 'user', text });
+    localStorage.setItem('pangAI_messages', JSON.stringify(messages));
+    renderMessages();
+}
+
+// Handle sending AI response
+sendBtn.onclick = () => {
+    const text = userInput.value.trim();
+    if(!text) return;
+    addAIMessage(text);
+    userInput.value = '';
+};
+
+// For demonstration, we can allow simulating a user message via prompt
+// remove this in real usage
+window.simulateUser = () => {
+    const text = prompt("Simulate user message:");
+    if(text) addUserMessage(text);
+};
+
+// Initial render
+renderMessages();
+
+// Optional: expose a "JSON endpoint" for the extension to fetch
+// In static hosting, we can't POST/serve JSON dynamically, so here's a trick using query param
+// Example: fetch('https://your-repo.github.io/pangai.html?json=true')
+if (new URLSearchParams(window.location.search).has('json')) {
+    document.body.innerHTML = '';
+    document.write(JSON.stringify(messages));
+}
+</script>
+
+</body>
+</html>
