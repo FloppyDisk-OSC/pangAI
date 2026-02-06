@@ -30,37 +30,26 @@ body {
 }
 .user { background:#444; }
 .ai { background:#0a0; }
-#replyInput { 
-    width:70%; 
-    padding:8px; 
-    border-radius:5px; 
-    border:none; 
-    margin-right:5px; 
-}
-#sendBtn { 
-    padding:8px 15px; 
-    border:none; 
-    border-radius:5px; 
-    background:#00f; 
-    color:#fff; 
-    cursor:pointer; 
-}
+#replyInput { width:60%; padding:8px; border-radius:5px; border:none; margin-right:5px; }
+#sendBtn { padding:8px 15px; border:none; border-radius:5px; background:#00f; color:#fff; cursor:pointer; }
+#imageInput { margin-top:4px; }
+img { max-width:100%; border-radius:6px; margin-top:4px; }
 </style>
 </head>
 <body>
 
 <h2>PangAI Firebase Panel</h2>
-
 <div id="chatContainer"></div>
-
 <div>
 <input id="replyInput" placeholder="Type AI response..." />
 <button id="sendBtn">Send</button>
+<input type="file" id="imageInput" accept="image/*" />
 </div>
 
 <!-- Firebase SDKs -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 
 <script>
 // Firebase config
@@ -73,42 +62,67 @@ const firebaseConfig = {
   appId: "1:456349287523:web:e0a252e4b55f3dd294e456"
 };
 
-// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+const storage = firebase.storage();
 
 const chatContainer = document.getElementById('chatContainer');
 const replyInput = document.getElementById('replyInput');
 const sendBtn = document.getElementById('sendBtn');
+const imageInput = document.getElementById('imageInput');
 
-// Function to render a message in the chat container
 function renderMessage(doc) {
+  const data = doc.data();
   const div = document.createElement('div');
-  div.className = 'message ' + doc.data().type;
-  div.textContent = (doc.data().type === 'ai' ? 'AI: ' : 'User: ') + doc.data().text;
+  div.className = 'message ' + data.type;
+  div.textContent = data.text || '';
+  if(data.imageUrl){
+    const img = document.createElement('img');
+    img.src = data.imageUrl;
+    div.appendChild(img);
+  }
   chatContainer.appendChild(div);
   chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
-// Listen for new messages in Firestore in real-time
+// Listen for messages
 db.collection('messages').orderBy('timestamp')
   .onSnapshot(snapshot => {
     chatContainer.innerHTML = '';
     snapshot.forEach(doc => renderMessage(doc));
   });
 
-// Send AI response
+// Send text message
 sendBtn.onclick = () => {
   const text = replyInput.value.trim();
   if(!text) return;
   db.collection('messages').add({
-    text: text,
     type: 'ai',
+    text: text,
     timestamp: firebase.firestore.FieldValue.serverTimestamp()
   });
   replyInput.value = '';
 };
-</script>
 
+// Upload image
+imageInput.onchange = async () => {
+  const file = imageInput.files[0];
+  if(!file) return;
+
+  const fileRef = storage.ref('images/' + Date.now() + '_' + file.name);
+  await fileRef.put(file);
+  const url = await fileRef.getDownloadURL();
+
+  db.collection('messages').add({
+    type: 'ai',
+    text: replyInput.value.trim() || '',
+    imageUrl: url,
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  replyInput.value = '';
+  imageInput.value = '';
+};
+</script>
 </body>
 </html>
