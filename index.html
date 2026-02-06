@@ -4,30 +4,9 @@
 <meta charset="UTF-8">
 <title>PangAI Firebase Panel</title>
 <style>
-body { 
-    background: #111; 
-    color: white; 
-    font-family: sans-serif; 
-    display:flex; 
-    flex-direction:column; 
-    align-items:center; 
-    padding:20px; 
-}
-#chatContainer { 
-    width:90%; 
-    max-width:600px; 
-    height:400px; 
-    overflow-y:auto; 
-    background:#222; 
-    padding:10px; 
-    border-radius:10px; 
-    margin-bottom:10px; 
-}
-.message { 
-    margin:5px 0; 
-    padding:5px; 
-    border-radius:5px; 
-}
+body { background: #111; color: white; font-family: sans-serif; display:flex; flex-direction:column; align-items:center; padding:20px;}
+#chatContainer { width:90%; max-width:600px; height:400px; overflow-y:auto; background:#222; padding:10px; border-radius:10px; margin-bottom:10px;}
+.message { margin:5px 0; padding:5px; border-radius:5px; }
 .user { background:#444; }
 .ai { background:#0a0; }
 #replyInput { width:60%; padding:8px; border-radius:5px; border:none; margin-right:5px; }
@@ -40,19 +19,18 @@ img { max-width:100%; border-radius:6px; margin-top:4px; }
 
 <h2>PangAI Firebase Panel</h2>
 <div id="chatContainer"></div>
+
 <div>
 <input id="replyInput" placeholder="Type AI response..." />
 <button id="sendBtn">Send</button>
 <input type="file" id="imageInput" accept="image/*" />
 </div>
 
-<!-- Firebase SDKs -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 
 <script>
-// Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyBpDQlmOZHQrdRQF1mQPk_aPgxwb6gbheY",
   authDomain: "pangai.firebaseapp.com",
@@ -71,58 +49,74 @@ const replyInput = document.getElementById('replyInput');
 const sendBtn = document.getElementById('sendBtn');
 const imageInput = document.getElementById('imageInput');
 
-function renderMessage(doc) {
-  const data = doc.data();
-  const div = document.createElement('div');
-  div.className = 'message ' + data.type;
-  div.textContent = data.text || '';
-  if(data.imageUrl){
-    const img = document.createElement('img');
-    img.src = data.imageUrl;
-    div.appendChild(img);
-  }
-  chatContainer.appendChild(div);
-  chatContainer.scrollTop = chatContainer.scrollHeight;
+function renderMessage(doc){
+    const data = doc.data();
+    const div = document.createElement('div');
+    div.className = 'message ' + data.type;
+    div.style = "margin:6px 0; padding:6px; border-radius:6px; background:" + (data.type==="ai"? "#0a0":"#444");
+
+    if(data.text){
+        const p = document.createElement("p");
+        p.textContent = data.text;
+        p.style = "margin:0;";
+        div.appendChild(p);
+    }
+    if(data.imageUrl){
+        const img = document.createElement("img");
+        img.src = data.imageUrl;
+        img.style = "max-width:100%; border-radius:6px; margin-top:4px;";
+        div.appendChild(img);
+    }
+
+    chatContainer.appendChild(div);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
-// Listen for messages
-db.collection('messages').orderBy('timestamp')
-  .onSnapshot(snapshot => {
+// Real-time listener
+db.collection('messages').orderBy('timestamp').onSnapshot(snapshot => {
     chatContainer.innerHTML = '';
     snapshot.forEach(doc => renderMessage(doc));
-  });
+});
 
-// Send text message
+// Send text
 sendBtn.onclick = () => {
-  const text = replyInput.value.trim();
-  if(!text) return;
-  db.collection('messages').add({
-    type: 'ai',
-    text: text,
-    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-  });
-  replyInput.value = '';
+    const text = replyInput.value.trim();
+    if(!text) return;
+    if(text === "/clearchat"){
+        // dev command to clear all chat
+        db.collection('messages').get().then(snapshot => {
+            snapshot.forEach(doc => doc.ref.delete());
+        });
+        replyInput.value = '';
+        return;
+    }
+    db.collection('messages').add({
+        type: 'ai',
+        text: text,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    replyInput.value = '';
 };
 
 // Upload image
 imageInput.onchange = async () => {
-  const file = imageInput.files[0];
-  if(!file) return;
+    const file = imageInput.files[0];
+    if(!file) return;
+    const fileRef = storage.ref('images/' + Date.now() + '_' + file.name);
+    await fileRef.put(file);
+    const url = await fileRef.getDownloadURL();
 
-  const fileRef = storage.ref('images/' + Date.now() + '_' + file.name);
-  await fileRef.put(file);
-  const url = await fileRef.getDownloadURL();
+    db.collection('messages').add({
+        type: 'ai',
+        text: replyInput.value.trim() || '',
+        imageUrl: url,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
 
-  db.collection('messages').add({
-    type: 'ai',
-    text: replyInput.value.trim() || '',
-    imageUrl: url,
-    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-  });
-
-  replyInput.value = '';
-  imageInput.value = '';
+    replyInput.value = '';
+    imageInput.value = '';
 };
 </script>
+
 </body>
 </html>
