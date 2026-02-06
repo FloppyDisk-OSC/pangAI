@@ -5,6 +5,8 @@
 <title>PangChat Room</title>
 <style>
 body { background:#111; color:white; font-family:sans-serif; display:flex; flex-direction:column; align-items:center; padding:20px;}
+#patchBanner { margin-bottom:10px; font-weight:bold; }
+#versionWarning { color:#f55; margin-bottom:10px; display:none; }
 #chatContainer { width:90%; max-width:600px; height:400px; overflow-y:auto; background:#222; padding:10px; border-radius:10px; margin-bottom:10px;}
 .message { margin:5px 0; padding:5px; border-radius:5px; background:#444; }
 .message p { margin:2px 0 0 0; }
@@ -13,21 +15,22 @@ body { background:#111; color:white; font-family:sans-serif; display:flex; flex-
 #nameInput, #textInput { padding:8px; border-radius:5px; border:none; margin-right:5px; flex:1; }
 #sendBtn { padding:8px 15px; border:none; border-radius:5px; background:#00f; color:#fff; cursor:pointer; }
 .dev-delete { font-size:10px; color:red; cursor:pointer; margin-left:6px; }
-#patchNumber { margin-bottom:10px; font-size:14px; color:#0af; }
 </style>
 </head>
 <body>
 
 <h2>PangChat Room</h2>
-<div id="patchNumber">Current Patch: 1.3.0</div>
+<div id="patchBanner">Current Patch: 1.3.0</div>
+<div id="versionWarning">⚠ Your patch is outdated. Please update to send messages!</div>
 <div id="chatContainer"></div>
 
 <div id="inputRow">
 <input id="nameInput" placeholder="Your name" />
-<input id="textInput" placeholder="Type a message..." maxlength="300"/>
+<input id="textInput" placeholder="Type a message..." />
 <button id="sendBtn">Send</button>
 </div>
 
+<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
@@ -50,16 +53,14 @@ const chatContainer = document.getElementById('chatContainer');
 const nameInput = document.getElementById('nameInput');
 const textInput = document.getElementById('textInput');
 const sendBtn = document.getElementById('sendBtn');
+const versionWarning = document.getElementById('versionWarning');
 
-// Escape HTML
+let versionAllowed = false;
+
+// Markdown + HTML escaping
 function escapeHTML(str){
-    return str.replace(/[&<>"']/g, c => ({
-        "&":"&amp;","<":"&lt;",">":"&gt;",
-        '"':"&quot;","'":"&#39;"
-    }[c]));
+    return str.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
-
-// Markdown parser (safe)
 function parseMarkdown(text){
     text = escapeHTML(text);
     text = text.replace(/\*\*(.*?)\*\*/g,"<b>$1</b>");
@@ -69,7 +70,7 @@ function parseMarkdown(text){
     return text;
 }
 
-// Render message
+// Render a message
 function renderMessage(doc){
     const data = doc.data();
     const div = document.createElement('div');
@@ -86,39 +87,47 @@ function renderMessage(doc){
         div.appendChild(textP);
     }
 
-    // dev-only delete button
-    if(window.location.search.includes("dev=true")){
-        const delBtn = document.createElement('span');
-        delBtn.className = 'dev-delete';
-        delBtn.textContent = "[x]";
-        delBtn.onclick = ()=> db.collection('messages').doc(doc.id).delete();
-        nameP.appendChild(delBtn);
-    }
-
     chatContainer.appendChild(div);
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
-// Live listener
+// Check patch version
+async function checkVersion() {
+    try{
+        const doc = await db.collection("config").doc("version").get();
+        const allowed = doc.exists ? doc.data().allowedVersions : [];
+        versionAllowed = allowed.includes(PATCH_VERSION);
+        if(!versionAllowed){
+            versionWarning.style.display = "block";
+            textInput.disabled = true;
+            sendBtn.disabled = true;
+            sendBtn.textContent = "Disabled";
+        } else {
+            versionWarning.style.display = "none";
+            textInput.disabled = false;
+            sendBtn.disabled = false;
+            sendBtn.textContent = "Send";
+        }
+    } catch(e){
+        console.warn("Version check failed", e);
+    }
+}
+
+checkVersion();
+
+// Real-time listener
 db.collection('messages').orderBy('timestamp').onSnapshot(snapshot=>{
     chatContainer.innerHTML='';
     snapshot.forEach(doc=>renderMessage(doc));
 });
 
-// send message
+// Send message
 async function sendMessage(){
+    if(!versionAllowed) return;
     const name = nameInput.value.trim() || "Anonymous";
     const text = textInput.value.trim();
     if(!text) return;
-
-    // dev-only /clearchat
-    if(text==="/clearchat" && window.location.search.includes("dev=true")){
-        const snap = await db.collection('messages').get();
-        snap.forEach(doc=>doc.ref.delete());
-        textInput.value='';
-        return;
-    }
-
+    if(text.length>300) return alert("Message too long! Max 300 chars.");
     await db.collection('messages').add({
         name,
         text,
@@ -129,18 +138,23 @@ async function sendMessage(){
 }
 
 sendBtn.onclick = sendMessage;
-textInput.addEventListener('keydown',e=>{ if(e.key==="Enter") sendMessage(); });
+textInput.addEventListener('keydown', e=>{if(e.key==="Enter") sendMessage();});
 
-// expose dev commands
+// --- Dev Console Commands ---
 window.pangChatDev = {
-    clearChat: async ()=> {
+    clearChat: async function() {
+        const pass = prompt("Enter dev passcode:");
+        if(pass!=="YOUR_SECRET_DEV_PASS") return console.warn("Wrong passcode!");
         const snap = await db.collection('messages').get();
         snap.forEach(doc=>doc.ref.delete());
-        console.log("Chat cleared!");
+        console.log("✅ Chat cleared!");
     },
-    deleteMessage: async (docId)=> {
+    deleteMessage: async function(docId) {
+        const pass = prompt("Enter dev passcode:");
+        if(pass!=="YOUR_SECRET_DEV_PASS") return console.warn("Wrong passcode!");
+        if(!docId) return console.warn("Must provide a message ID!");
         await db.collection('messages').doc(docId).delete();
-        console.log("Deleted message:", docId);
+        console.log("✅ Deleted message:", docId);
     }
 };
 </script>
