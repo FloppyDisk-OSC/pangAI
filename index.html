@@ -57,7 +57,7 @@ const versionWarning = document.getElementById('versionWarning');
 
 let versionAllowed = false;
 
-// Markdown + HTML escaping
+// Escape HTML + Markdown
 function escapeHTML(str){
     return str.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
@@ -91,11 +91,13 @@ function renderMessage(doc){
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
-// Check patch version
+// Check allowed versions
 async function checkVersion() {
-    try{
+    try {
         const doc = await db.collection("config").doc("version").get();
-        const allowed = doc.exists ? doc.data().allowedVersions : [];
+        const allowed = doc.exists && Array.isArray(doc.data().allowedVersions) 
+                        ? doc.data().allowedVersions 
+                        : [];
         versionAllowed = allowed.includes(PATCH_VERSION);
         if(!versionAllowed){
             versionWarning.style.display = "block";
@@ -110,6 +112,11 @@ async function checkVersion() {
         }
     } catch(e){
         console.warn("Version check failed", e);
+        versionAllowed = false;
+        versionWarning.style.display = "block";
+        textInput.disabled = true;
+        sendBtn.disabled = true;
+        sendBtn.textContent = "Disabled";
     }
 }
 
